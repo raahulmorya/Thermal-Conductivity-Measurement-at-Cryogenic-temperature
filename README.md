@@ -8,6 +8,9 @@ A microcontroller-based system for calculating thermal conductivity of materials
 
 ---
 
+![Setup Till now](hardware-setup/Setup.jpg)
+
+---
 ![PT200](hardware-setup/PT200-RTD.jpg)
 
 ---
