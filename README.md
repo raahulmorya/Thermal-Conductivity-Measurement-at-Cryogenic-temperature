@@ -4,6 +4,13 @@ A microcontroller-based system for calculating thermal conductivity of materials
 
 ---
 
+![Hardware](hardware-setup/Hardware.jpg)
+
+---
+
+![PT200](hardware-setup/PT200-RTD.jpg)
+
+---
 ## 📌 Project Overview
 
 This project aims to **measure thermal conductivity** of sample materials in the **cryogenic range (73K to 123K)** by recording temperature gradients across the material and power supplied to a heater. The entire setup is built using **ESP32**, **MAX31865 (RTD amplifier)**, **INA219 (current & voltage sensing)**, and logs data to **Google Sheets** with real-time monitoring via an **embedded web dashboard**.
@@ -19,6 +26,7 @@ This project aims to **measure thermal conductivity** of sample materials in the
 - 🔥 **Resistive Heater**
 - 🧊 **Cryogenic Setup Chamber**
 - 📈 **Google Sheets** for data logging
+- 
 
 ---
 
@@ -62,11 +70,11 @@ Where:
 ## 📦 Repository Structure
 
 ```bash
-📁 Thermal-Conductivity-Cryo
-├── 📂 Arduino_Code
+📁 Thermal-Conductivity-at
+├── 📂 main
 │   ├── main.ino
 │   └── libraries/
-├── 📂 Images
+├── 📂 setup
 │   └── setup_diagram.png
 ├── 📄 README.md
 └── 📄 LICENSE
@@ -89,22 +97,5 @@ Where:
 - 📖 **RTD Interfacing with MAX31865** – Temperature sensing at precision level
 - 🔌 **Power Monitoring with INA219** – Energy efficiency tracking
 
----
 
-## 📃 License
 
-This project is licensed under the MIT License.
-
----
-
-## 🤝 Contributions
-
-Feel free to open issues or PRs! If you’ve built something similar or enhanced this system, let’s connect!
-
----
-
-## 📬 Contact
-
-Developed by [Your Name]  
-📧 [your.email@example.com]  
-🔗 [LinkedIn](https://linkedin.com/in/your-profile) | 🌐 [Website](https://yourwebsite.com)
