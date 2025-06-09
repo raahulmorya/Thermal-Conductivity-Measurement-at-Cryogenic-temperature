@@ -835,7 +835,11 @@ document.getElementById('pwmValue').textContent = percentage ;
     html.replace("%BUS_VOLTAGE%", String(busVoltage));
     html.replace("%CURRENT%", String(current_mA));
     html.replace("%THERMAL_CONDUCTIVITY%", String(thermalConductivity));
-    html.replace("%PWM_VALUE%", String(ledcRead(0) * 100 / 255)); // Convert to percentage
+    int pwm_value = ledcRead(0);
+    pwm_value = constrain(pwm_value, 0, 255); // Force valid range
+    int percentage = (255 - pwm_value) * 100 / 255;
+    html.replace("%PWM_VALUE%", String(percentage));
+    // html.replace("%PWM_VALUE%", String(ledcRead(0) * 100 / 255)); // Convert to percentage
     html.replace("%MOSFET_STATE%", mosfetState ? "ON" : "OFF");
 
     server.send(200, "text/html", html);
