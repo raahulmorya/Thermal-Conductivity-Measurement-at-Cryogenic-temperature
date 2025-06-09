@@ -35,7 +35,7 @@
 #define DataLED3 27   // Data transmission LED
 #define BUTTON 26     // Push button pin (configured as pull-down)
 #define MOSFET 25     // MOSFET gate control pin
-
+#define SAMPLE_COUNT 10 // Average over 10 readings
 
 // MAX31865 Setup (PT200)
 #define CS1 5          // Chip Select for Max31865 sensor 1
@@ -528,7 +528,7 @@ void buttonTask(void *pvParameters)
                     //     pwmValue = 0; // Default to full power when turning on
                     // }
                     // ledcWrite(0, pwmValue);
-                    ledcWrite(0, mosfetState ? 0 : 255); // ON=0, OFF=255
+                    ledcWrite(0, mosfetState ? 255 : 0); // ON=0, OFF=255
                     mosfetState = !mosfetState;
 
                     digitalWrite(MosfetLED2, mosfetState);
@@ -603,6 +603,17 @@ void myFunction()
     // For future upgrade add custom function code here
 }
 
+float readStableCurrent()
+{
+    float sum = 0;
+    for (int i = 0; i < SAMPLE_COUNT; i++)
+    {
+        sum += ina219.getCurrent_mA();
+        delay(10); // Small delay between readings
+    }
+    return sum / SAMPLE_COUNT;
+}
+
 void measureParameters()
 {
     // Read temperature
@@ -613,8 +624,9 @@ void measureParameters()
 
     // Read Bus Voltage, Current, and Power
     busVoltage = ina219.getBusVoltage_V();
-    current_mA = ina219.getCurrent_mA();
-    power_mW = ina219.getPower_mW();
+    current_mA = readStableCurrent();
+    // power_mW = ina219.getPower_mW();
+    power_mW = busVoltage * current_mA;
 }
 
 void sendDataToCloud()
