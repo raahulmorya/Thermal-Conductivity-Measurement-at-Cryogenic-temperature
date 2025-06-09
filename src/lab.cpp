@@ -17,15 +17,14 @@
 #define EEPROM_SIZE 64       // Size in bytes (more than we need)
 #define EEPROM_OFFSET_ADDR 0 // Address to store our offset
 #define OTA_USER "admin"
-#define OTA_PASS "admin123"
+#define OTA_PASS "admin!@#$123"
 
 // NITJ-WiFi credentials (replace with your actual credentials)
 #define NITJ_USERNAME "your_username"
 #define NITJ_PASSWORD "your_password"
 
 // Google Apps Script URL
-// #define GOOGLE_SCRIPT_URL "https://script.google.com/macros/s/AKfycbwwrsw9v3StLrnlF-ybqiIHzmC4QfPpTR-4sC5Go55EabMVKxSj0ARoNnL70llefInTQw/exec"
-#define GOOGLE_SCRIPT_URL "https://script.google.com/macros/s/AKfycbwwrsw9v3StLrnlF-ybqiIHzmC4QfPpTR-4sC5Go55EabMVKxSj0ARoNnL70llefInTQw/exec"
+#define GOOGLE_SCRIPT_URL "https://script.google.com/macros/s/Axxxx"
 
 #define MEDIAN_WINDOW 5 // Odd number (3, 5, or 7 work well)
 
@@ -58,9 +57,9 @@ typedef struct
 } CloudData_t;
 
 // Wi-Fi definitions 
-const int NUM_NETWORKS = 4;
-const char *ssid[NUM_NETWORKS] = {"NITJ-WiFi", "OPTIMUS", "BackupWiFi2", "BackupWiFi3"};
-const char *password[NUM_NETWORKS] = {"", "qqwweeaaaa", "backup456", "backup789"};
+const int NUM_NETWORKS = 3;
+const char *ssid[NUM_NETWORKS] = {"NITJ-WiFi", "OPTIMUS", "cryo"};
+const char *password[NUM_NETWORKS] = {"", "qqwweeaaaa", "cryo@123"};
 
 float tempBuffer1[MEDIAN_WINDOW] = {0};
 float tempBuffer2[MEDIAN_WINDOW] = {0};
@@ -288,6 +287,7 @@ void mainTask(void *pvParameters)
         if (strlen(password[i]) == 0)
         {                        // Empty password
             WiFi.begin(ssid[i]); // No password parameter
+            Serial.println("NITJ WIFI");
         }
         else
         {
@@ -330,7 +330,7 @@ void mainTask(void *pvParameters)
     Serial.println("\nConnected to Wi-Fi!");
     Serial.print("ESP32 IP Address: ");
     Serial.println(WiFi.localIP());
-
+    
     // Initialize MAX31865 sensors
     max1.begin(MAX31865_2WIRE);
     max2.begin(MAX31865_2WIRE);
@@ -416,8 +416,9 @@ void cloudTask(void *pvParameters)
         {
             if (WiFi.status() == WL_CONNECTED)
             {
-                Serial.printf("[Cloud] Sending: T1=%.2f, T2=%.2f, V=%.2f\n",
-                              data.temp1, data.temp2, data.busVoltage);
+                // Serial.printf("[Cloud] Sending: T1=%.2f, T2=%.2f, V=%.2f\n",
+                //               data.temp1, data.temp2, data.busVoltage);
+                Serial.println("[Cloud] Sending");
 
                 sendDataToGoogleSheets(
                     data.temp1,
@@ -593,14 +594,59 @@ void buttonTask(void *pvParameters)
 void myFunction()
 {
     Serial.println("Long press detected - executing myFunction()");
-    digitalWrite(WifiLED1, HIGH); // Start with WiFi LED on (solid)
+
+    // Visual feedback
+    digitalWrite(WifiLED1, HIGH);
     digitalWrite(MosfetLED2, HIGH);
     digitalWrite(DataLED3, HIGH);
     delay(200);
-    digitalWrite(WifiLED1, LOW); // Start with WiFi LED on (solid)
+    digitalWrite(WifiLED1, LOW);
     digitalWrite(MosfetLED2, LOW);
     digitalWrite(DataLED3, LOW);
-    // For future upgrade add custom function code here
+
+    // Only attempt logout if connected to NITJ-WiFi
+    if (WiFi.SSID() == "NITJ-WiFi")
+    {
+        Serial.println("Attempting to logout from NITJ-WiFi captive portal...");
+
+        WiFiClient client;
+        HTTPClient http;
+
+        // Configure logout URL - try both endpoints
+        String logoutURL = "http://10.10.11.1:8090/logout.xml";
+        // Alternative: "http://10.10.11.1:8090/httpclient.html"
+
+        http.begin(client, logoutURL);
+        http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+        // Prepare logout payload
+        String postData = "mode=193&username=" + String(NITJ_USERNAME);
+
+        int httpResponseCode = http.POST(postData);
+        String response = http.getString();
+
+        Serial.print("Logout response code: ");
+        Serial.println(httpResponseCode);
+        Serial.print("Response: ");
+        Serial.println(response);
+
+        http.end();
+
+        if (response.indexOf("success") != -1 || response.indexOf("logout") != -1)
+        {
+            Serial.println("Successfully logged out from captive portal");
+            // Optional: Disconnect WiFi after logout
+            WiFi.disconnect();
+        }
+        else
+        {
+            Serial.println("Logout may have failed - check response");
+        }
+    }
+    else
+    {
+        Serial.println("Not connected to NITJ-WiFi - logout not required");
+    }
 }
 
 float readStableCurrent()
@@ -619,8 +665,8 @@ void measureParameters()
     // Read temperature
     temp1 = readTemperature1(max1);
     temp2 = readTemperature2(max2);
-    Serial.println(temp1);
-    Serial.println(temp2);
+    // Serial.println(temp1);
+    // Serial.println(temp2);
 
     // Read Bus Voltage, Current, and Power
     busVoltage = ina219.getBusVoltage_V();
@@ -651,7 +697,18 @@ void sendDataToGoogleSheets(float t1, float t2, float voltage, float current, fl
     http.begin(GOOGLE_SCRIPT_URL);
     http.addHeader("Content-Type", "application/json");
 
-    String postData = "{\"temp1\":" + String(t1) + ",\"temp2\":" + String(t2) + ",\"voltage\":" + String(voltage) + ",\"current\":" + String(current) + ",\"power\":" + String(power) + ",\"thickness\":" + String(sampleThickness) + ",\"area\":" + String(crossSectionArea) + ",\"conductivity\":" + String(thermalConductivity) + "}";
+    String ipAddress = WiFi.localIP().toString();
+
+    String postData = "{\"temp1\":" + String(t1) +
+                      ",\"temp2\":" + String(t2) +
+                      ",\"voltage\":" + String(voltage) +
+                      ",\"current\":" + String(current) +
+                      ",\"power\":" + String(power) +
+                      ",\"thickness\":" + String(sampleThickness) +
+                      ",\"area\":" + String(crossSectionArea) +
+                      ",\"conductivity\":" + String(thermalConductivity) +
+                      ",\"ip\":\"" + ipAddress + "\"" + 
+                      "}";
 
     int httpResponseCode = http.POST(postData);
     Serial.println("Response Code: " + String(httpResponseCode));
@@ -660,6 +717,9 @@ void sendDataToGoogleSheets(float t1, float t2, float voltage, float current, fl
     {
         bool ledCommand = true;
         xQueueSend(dataLedQueue, &ledCommand, portMAX_DELAY);
+    }
+    else{
+        Serial.println("Data not sent");
     }
 
     http.end();
@@ -993,41 +1053,102 @@ void handleUpdatePage()
     server.send(200, "text/html", updateHTML);
 }
 
+// Helper function to check internet access via HTTP
+bool checkInternetAccess()
+{
+    WiFiClient client;
+    HTTPClient http;
+
+    http.begin(client, "http://www.google.com");
+    int httpCode = http.GET();
+    http.end();
+
+    return (httpCode == HTTP_CODE_OK);
+}
+
+
+
 bool handleNITJWifiCaptivePortal()
 {
-    WiFiClientSecure client;
-    client.setInsecure(); // Bypass SSL verification (for testing)
-
     HTTPClient http;
-    String portalURL = "https://10.10.11.1:8090/login.xml";
 
-    http.begin(client, portalURL);
+    // First make a GET request to establish session (like the Python script)
+    String portalUrl = "http://10.10.11.1:8090/httpclient.html";
+
+    http.begin(portalUrl);
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-    // Form data for NITJ-WiFi portal
-    // String postData = "username=your_username&password=your_password&mode=191";
-
-    // String postData = "user=" + String(NITJ_USERNAME) +
-    //                   "&pass=" + String(NITJ_PASSWORD);
+    http.addHeader("User-Agent", "Mozilla/5.0");
+    
     String postData = "username=" + String(NITJ_USERNAME) +
                       "&password=" + String(NITJ_PASSWORD) +
                       "&mode=191";
-    
+
     int httpResponseCode = http.POST(postData);
 
     if (httpResponseCode > 0)
     {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+
         String response = http.getString();
-        Serial.println("Portal Response:");
+        Serial.println("Response:");
         Serial.println(response);
-        http.end();
-        return true;
+
+        if (response.indexOf("success") != -1)
+        {
+            Serial.println("Login successful!");
+        }
+        else
+        {
+            Serial.println("Login may have failed - check response");
+        }
     }
     else
     {
-        Serial.print("Portal login failed. Error code: ");
+        Serial.print("Error code: ");
         Serial.println(httpResponseCode);
-        http.end();
-        return false;
     }
+
+    http.end();
+    // // Now make the login POST request
+    // String loginUrl = "http://10.10.11.1:8090/httpclient.html";
+    // http.begin(client, loginUrl);
+    // http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    // // Form data with proper encoding
+
+    // Serial.println("Attempting portal login with POST data:");
+    // Serial.println(postData);
+
+    // int httpResponseCode = http.POST(postData);
+    // String response = http.getString();
+
+    // Serial.print("Login response code: ");
+    // Serial.println(httpResponseCode);
+    // Serial.print("Response: ");
+    // Serial.println(response);
+
+    // http.end();
+
+    // // Check for success indicators
+    // bool success = (httpResponseCode > 0) &&
+    //                (response.indexOf("success") != -1 ||
+    //                 response.indexOf("authenticated") != -1);
+
+    // if (success)
+    // {
+    //     Serial.println("Captive portal login successful!");
+    //     // Verify internet connectivity
+    //     if ( checkInternetAccess())
+    //     {
+    //         return true;
+    //     }
+    //     Serial.println("Internet access verification failed");
+    //     return false;
+    // }
+
+    // Serial.println("Captive portal login failed");
+    // return false;
+    return true;
 }
+
