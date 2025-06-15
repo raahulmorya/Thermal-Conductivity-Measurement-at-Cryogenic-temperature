@@ -5,6 +5,9 @@ A microcontroller-based system for calculating thermal conductivity of materials
 ---
 
 ![Hardware](hardware-setup/Hardware.jpg)
+---
+
+![Hardware](hardware-setup/Hardware1.jpg)
 
 ---
 
