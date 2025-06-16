@@ -73,20 +73,6 @@ Where:
                            Web Dashboard + Google Sheets
 ```
 
----
-
-## 📦 Repository Structure
-
-```bash
-📁 Thermal-Conductivity-at
-├── 📂 main
-│   ├── main.ino
-│   └── libraries/
-├── 📂 setup
-│   └── setup_diagram.png
-├── 📄 README.md
-└── 📄 LICENSE
-```
 
 ---
 
