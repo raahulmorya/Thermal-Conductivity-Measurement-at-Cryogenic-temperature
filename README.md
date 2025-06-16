@@ -78,9 +78,11 @@ Where:
 
 ## 🚀 Getting Started
 
-1. Flash `main.ino` to ESP32 using Arduino IDE
-2. Connect sensors and heater as per schematic
-3. Open Serial Monitor or Web Dashboard
-4. Observe readings and conductivity calculations in real-time
+1. Clone the repository and open in VS code with PlatformIO extension installed
+2. PlatformIO will auto-configure and install required libraries
+3. Add Google AppScript link in the code and wifi credentials
+4. Connect sensors and heater as per schematic
+5. Open Serial Monitor or Web Dashboard to observe readings and conductivity calculations in real-time
+   
 
 ---
