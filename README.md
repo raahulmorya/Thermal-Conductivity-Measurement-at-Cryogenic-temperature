@@ -66,8 +66,8 @@ Where:
 ## 🖼️ System Architecture
 
 ```
-[ PT200 RTD Sensors ]
-        ↓
+[ PT200 RTD Sensors ]   [ Heater Cotnrol ] 
+        ↓                       ↑ 
 [ MAX31865 Amplifier ]  →  [ ESP32 ] ← [ INA219 Power Sensor ]
                                     ↓
                            Web Dashboard + Google Sheets
