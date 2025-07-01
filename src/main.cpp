@@ -7,7 +7,7 @@
 #include <freertos/task.h>
 #include <freertos/queue.h>
 #include <freertos/timers.h>
-#include <cmath>
+// #include <cmath>
 #include <Update.h>
 #include <updatePage.h>
 #include <ESPmDNS.h>
@@ -17,14 +17,14 @@
 #define EEPROM_SIZE 64       // Size in bytes (more than we need)
 #define EEPROM_OFFSET_ADDR 0 // Address to store our offset
 #define OTA_USER "admin"
-#define OTA_PASS "admin!@#123"
+#define OTA_PASS "admin@123"
 
 // NITJ-WiFi credentials (replace with your actual credentials)
 #define NITJ_USERNAME "your_username"
 #define NITJ_PASSWORD "your_password"
 
-// Google Apps Script URL
-#define GOOGLE_SCRIPT_URL "https://script.google.com/macros/s/xxxxxxxxxxxxxxxxxxxxxxxx"
+// Google Apps Script URL Enter script url here 
+#define GOOGLE_SCRIPT_URL "https://script.google.com/macros/s/xxxxxxx"
 
 #define MEDIAN_WINDOW 5 // Odd number (3, 5, or 7 work well)
 
@@ -59,8 +59,9 @@ typedef struct
 
 // Wi-Fi definitions
 const int NUM_NETWORKS = 5;
-const char *ssid[NUM_NETWORKS] = {"OPTIMUS", "Lab", "Ted", "OPTIMUS", "cryo"};
-const char *password[NUM_NETWORKS] = {"qqwweeaaaa", "lab1234567", "Ted12345", "qqwweeaaaa", "cryo@123"};
+
+const char *ssid[NUM_NETWORKS] = {"lab", "NIT-WiFi", "OPTIMUS", "Nokia", "cryo"};
+const char *password[NUM_NETWORKS] = {"lab@12345", "", "qqwweeaaaa", "HMDG@123", "cryo@123"};
 
 float tempBuffer1[MEDIAN_WINDOW] = {0};
 float tempBuffer2[MEDIAN_WINDOW] = {0};
@@ -118,8 +119,6 @@ void myFunction();
 void measureParameters();
 void sendDataToCloud();
 void sendDataToGoogleSheets(float t1, float t2, float voltage, float current, float power);
-float readTemperature1(Adafruit_MAX31865 &sensor);
-float readTemperature2(Adafruit_MAX31865 &sensor);
 void handleRoot();
 void handleGetData();
 void calculateThermalconductivity();
@@ -127,6 +126,8 @@ void handleUpload();
 void handleUpdate();
 void handleUpdatePage();
 bool handleNITJWifiCaptivePortal();
+float readTemperature1(Adafruit_MAX31865 &sensor);
+float readTemperature2(Adafruit_MAX31865 &sensor);
 
 // Median Filter Implementation
 float getMedian(float samples[], int size)
@@ -160,6 +161,11 @@ void initMedianFilter()
 
 void saveOffsetToEEPROM(float offset)
 {
+    // First erase the entire EEPROM section we're using
+    for (int i = EEPROM_OFFSET_ADDR; i < EEPROM_OFFSET_ADDR + sizeof(float); i++)
+    {
+        EEPROM.write(i, 0xFF); // Write erase pattern
+    }
     EEPROM.put(EEPROM_OFFSET_ADDR, offset);
     EEPROM.commit();
     Serial.printf("Saved offset to EEPROM: %.3f\n", offset);
@@ -174,12 +180,40 @@ float readOffsetFromEEPROM()
     EEPROM.get(EEPROM_OFFSET_ADDR, offset);
 
     // Validate
-    if (isnan(offset) || offset < -10.0 || offset > 10.0)
+    // if (isnan(offset) || offset < -10.0 || offset > 10.0)
+    if (isnan(offset))
     {
         offset = 0.0;
     }
 
     return offset;
+}
+
+void resetEEPROMOffset()
+{
+    // Erase the EEPROM cells
+    for (int i = EEPROM_OFFSET_ADDR; i < EEPROM_OFFSET_ADDR + sizeof(float); i++)
+    {
+        EEPROM.write(i, 0xFF);
+    }
+    EEPROM.commit();
+
+    // Verify erase
+    float verify;
+    EEPROM.get(EEPROM_OFFSET_ADDR, verify);
+    if (isnan(verify) || verify != 0.0f)
+    {
+        // If not properly erased, force write 0.0
+        EEPROM.put(EEPROM_OFFSET_ADDR, 0.0f);
+        EEPROM.commit();
+    }
+}
+
+void handleResetOffset()
+{
+    resetEEPROMOffset();       // Clears EEPROM and sets to 0.0
+    temperature_offset = 0.0f; // Ensure in-memory value is reset
+    server.send(200, "text/plain", "Offset reset to zero");
 }
 
 void setup()
@@ -191,6 +225,11 @@ void setup()
 
     // Load saved offset
     temperature_offset = readOffsetFromEEPROM();
+
+    // // Initialize PWM for MOSFET control
+    // ledcSetup(0, 5000, 8);    // Channel 0, 5kHz, 8-bit resolution
+    // ledcAttachPin(MOSFET, 0); // Attach MOSFET pin to channel 0
+    // ledcWrite(0, 255);          // Start with 0% duty cycle
 
     // Improved hardware logic using ESP32 DAC
     dacWrite(DAC_GPIO, 0);
@@ -344,7 +383,50 @@ void mainTask(void *pvParameters)
 
     // Define Web Server routes
     server.on("/", handleRoot);
+    server.on("/setData", HTTP_POST, []()
+              {
+                  // Handle Sample Thickness
+                  if (server.hasArg("thickness"))
+                  {
+                      sampleThickness = server.arg("thickness").toFloat();
+                  }
+
+                  // Handle Sample Diameter
+                  if (server.hasArg("sampleDiameter"))
+                  {
+                      diameter = server.arg("sampleDiameter").toFloat();
+                  }
+
+                  // Handle Temperature Offset
+                  if (server.hasArg("temperatureoffset"))
+                  {
+                      float offset = server.arg("temperatureoffset").toFloat();
+                      temperature_offset += offset;
+                      Serial.println("setting offset");
+                      saveOffsetToEEPROM(temperature_offset);
+                  }
+
+                  // Handle DAC Value
+                  if (server.hasArg("dacValue"))
+                  {
+                      dacValue = server.arg("dacValue").toInt();
+                      dacWrite(DAC_GPIO, dacValue);
+                  }
+
+                  // server.send(200, "text/plain", "Parameters updated successfully");
+                  server.sendHeader("Location", "/");
+                  server.send(303); });
+
     server.on("/getData", handleGetData);
+    // server.on("/setDac", HTTP_GET, []()
+    //           {
+    //     if (server.hasArg("value")) {
+    //         dacValue = server.arg("value").toInt();
+    //         dacWrite(DAC_GPIO, dacValue);
+    //         Serial.print("DAC set to ");
+    //         Serial.println(dacValue);
+    //         server.send(200, "text/plain", "DAC set to " + String(dacValue));
+    //     } });
 
     server.on("/toggleMosfet", HTTP_GET, []()
               {
@@ -352,6 +434,8 @@ void mainTask(void *pvParameters)
             mosfetState = !mosfetState;
             digitalWrite(MosfetLED2, mosfetState);
             server.send(200, "text/plain", mosfetState ? "ON" : "OFF"); });
+
+    server.on("/resetOffset", HTTP_GET, handleResetOffset);
     server.on("/update", HTTP_GET, handleUpdatePage);
 
     server.on("/update", HTTP_POST, handleUpdate, handleUpload);
@@ -514,6 +598,16 @@ void buttonTask(void *pvParameters)
                 // Button released - check if it was a short press
                 if ((xTaskGetTickCount() - pressStartTime) < longPressDuration)
                 {
+                    // // Short press - toggle MOSFET
+                    // if (mosfetState)
+                    // {
+                    //     dacValue = 255;
+                    // }
+                    // else
+                    // {
+                    //     dacValue = 0; // Default to full power when turning on
+                    // }
+                    // ledcWrite(0, dacValue);
                     digitalWrite(MOSFET, mosfetState ? HIGH : LOW);
                     mosfetState = !mosfetState;
 
@@ -527,6 +621,54 @@ void buttonTask(void *pvParameters)
         vTaskDelay(50 / portTICK_PERIOD_MS); // Debounce delay
     }
 }
+
+// void buttonTask(void *pvParameters)
+// {
+//     TickType_t pressStartTime = 0;
+//     bool buttonPressed = false;
+//     const TickType_t longPressDuration = 3000 / portTICK_PERIOD_MS; // 3 seconds
+
+//     for (;;)
+//     {
+//         if (digitalRead(BUTTON) == HIGH)
+//         {
+//             if (!buttonPressed)
+//             {
+//                 // Button just pressed
+//                 buttonPressed = true;
+//                 pressStartTime = xTaskGetTickCount();
+//             }
+//             else
+//             {
+//                 // Button still pressed - check for long press
+//                 if ((xTaskGetTickCount() - pressStartTime) >= longPressDuration)
+//                 {
+//                     // Long press detected
+//                     buttonLongPress = true;
+//                     buttonPressed = false; // Reset to wait for release
+//                 }
+//             }
+//         }
+//         else
+//         {
+//             if (buttonPressed)
+//             {
+//                 // Button released - check if it was a short press
+//                 if ((xTaskGetTickCount() - pressStartTime) < longPressDuration)
+//                 {
+//                     // Short press - toggle MOSFET
+//                     digitalWrite(MOSFET, mosfetState);
+//                     mosfetState = !mosfetState;
+//                     digitalWrite(MosfetLED2, mosfetState);
+//                     Serial.println("MOSFET toggled: " + String(mosfetState ? "ON" : "OFF"));
+//                 }
+//                 buttonPressed = false;
+//             }
+//         }
+
+//         vTaskDelay(50 / portTICK_PERIOD_MS); // Debounce delay
+//     }
+// }
 
 void myFunction()
 {
@@ -649,7 +791,7 @@ void sendDataToGoogleSheets(float t1, float t2, float voltage, float current, fl
                       ",\"power\":" + String(power) +
                       ",\"thickness\":" + String(sampleThickness) +
                       ",\"area\":" + String(crossSectionArea) +
-                      ",\"conductivity\":" + String(thermalConductivity) +
+                      ",\"conductivity\":" + String(thermalConductivity, 4) +
                       ",\"ip\":\"" + ipAddress + "\"" +
                       "}";
 
@@ -671,56 +813,6 @@ void sendDataToGoogleSheets(float t1, float t2, float voltage, float current, fl
 
 void handleRoot()
 {
-    if (server.hasArg("thickness"))
-    {
-        sampleThickness = server.arg("thickness").toFloat();
-    }
-    if (server.hasArg("sampleDiameter"))
-    {
-        diameter = server.arg("sampleDiameter").toFloat();
-    }
-    if (server.hasArg("temperatureoffset"))
-    {
-        String offsetStr = server.arg("temperatureoffset");
-        float offset = offsetStr.toFloat();
-
-        Serial.print("Received offset is ");
-        Serial.println(offsetStr); // Print the raw string first
-
-        // Check if the string is exactly "0" or "0.00" etc.
-        if (offsetStr.equals("0") || offsetStr.equals("0.00") || offsetStr.equals("0.0"))
-        {
-            temperature_offset = 0.00;
-            Serial.print("Reset offset to ");
-            Serial.println(temperature_offset, 2); // Print with 2 decimal places
-        }
-        else
-        {
-            // Add a small epsilon to handle floating point precision
-            const float epsilon = 0.0001f;
-            if (fabs(offset) < epsilon)
-            {
-                temperature_offset = 0.00;
-                Serial.print("Reset offset to ");
-                Serial.println(temperature_offset, 2);
-            }
-            else
-            {
-                temperature_offset += offset;
-                Serial.print("Adjusted offset to ");
-                Serial.println(temperature_offset, 2);
-            }
-        }
-        saveOffsetToEEPROM(temperature_offset);
-    }
-    if (server.hasArg("dacValue"))
-    {
-        dacValue = server.arg("dacValue").toInt();
-        dacWrite(DAC_GPIO, dacValue);
-        Serial.print("Dac  Initialised to : ");
-        Serial.println(dacValue);
-    }
-
     String html = R"=====(
      <!-- Designed and Developed by Rahul Morya https://in.linkedin.com/in/rahul-morya-456a3b233 -->
 
@@ -777,7 +869,7 @@ void handleRoot()
     <!-- Input Form -->
     <div class='form-container'>
       <h2>Sample Parameters</h2>
-      <form method='post'>
+      <form method="post" action="/setData">
         <div class='form-group'>
           <label for='thickness'>Sample Thickness Δx (mm)</label>
           <input type='number' step='0.1' name='thickness' value='%THICKNESS%' required>
@@ -787,21 +879,23 @@ void handleRoot()
           <input type='number' step='0.1' name='sampleDiameter' value='%DIAMETER%' required>
         </div>
         <div class='form-group'>
-          <label for='temperatureoffset'>Temperature offset</label>
-          <input type='number' step='0.001' name='temperatureoffset' value='%TEMP_OFFSET%' required>
+            <label for='temperatureoffset'>Temperature offset</label>
+            <input type='number' step='0.001' name='temperatureoffset' value='%TEMP_OFFSET%' required>
+            <button type="button" onclick="resetOffset()" class="toggle-btn" style="margin-top: 10px;">Reset Offset</button>
         </div>
 
+
         <div class='form-container'>
-    <h2>Heater Control</h2>
-    <div class='slider-container'>
-        <label for='dacSlider'>Heater Voltage Level: <span id='dacValue'>%DAC_VALUE%</span></label>
-        <input type='range' min='0' max='255' value='%DAC_VALUE%' class='slider' id='dacSlider' name='dacSlider'>
-    </div>
-    <div class='info'>Current MOSFET State: 
-        <button onclick='toggleMosfet()' class='toggle-btn'><span id='mosfetState'>%MOSFET_STATE%</span></button>
-    </div>
-</div>
-        <button type='submit'>Update Parameters</button>
+            <h2>Heater Control</h2>
+            <div class='slider-container'>
+                <label for='dacSlider'>Heater Voltage Level: <span id='dacValue'>%DAC_VALUE%</span></label>
+                <input type='range' min='0' max='255' value='%DAC_VALUE%' class='slider' id='dacSlider' name='dacSlider'>
+            </div>
+            <div class='info'>Current MOSFET State: 
+                <button onclick='toggleMosfet()' class='toggle-btn'><span id='mosfetState'>%MOSFET_STATE%</span></button>
+            </div>
+        </div>
+            <button type='submit'>Update Parameters</button>
       </form>
     </div>
 
@@ -869,13 +963,23 @@ void handleRoot()
             .catch(error => console.error('Error toggling MOSFET:', error));
     }
 
+   function resetOffset() {
+    fetch('/resetOffset')
+        .then(response => response.text())
+        .then(message => {
+            alert(message); // "Offset reset to zero"
+            location.reload(); // Refresh to show changes
+        })
+        .catch(error => console.error('Error:', error));
+}
+
     // Update dac value when slider changes
     document.getElementById('dacSlider').addEventListener('input', function() {
         var dacValue = this.value;
         document.getElementById('dacValue').textContent = dacValue;
         
         // Send PWM value to server
-        fetch('/', {
+        fetch('/setData', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -922,7 +1026,7 @@ void handleGetData()
     json += "\"power_mW\":" + String(power_mW) + ",";
     json += "\"busVoltage\":" + String(busVoltage) + ",";
     json += "\"current_mA\":" + String(current_mA) + ",";
-    json += "\"thermalConductivity\":" + String(thermalConductivity) + ",";
+    json += "\"thermalConductivity\":" + String(thermalConductivity, 4) + ",";
     json += "\"dacValue\":" + String(dacValue) + ",";
     json += "\"mosfetState\":" + String(mosfetState);
     json += "}";
@@ -974,6 +1078,7 @@ float readTemperature1(Adafruit_MAX31865 &sensor)
 float readTemperature2(Adafruit_MAX31865 &sensor)
 {
     float rawTemp = sensor.temperature(RNOMINAL, RREF2) + 273.15 + temperature_offset;
+    // float rawTemp = sensor.temperature(RNOMINAL, RREF2) + 273.15;
 
     // Store in circular buffer
     tempBuffer2[bufferIndex2] = rawTemp;
@@ -990,10 +1095,10 @@ void calculateThermalconductivity()
     // Calculate thermal conductivity
     dT = temp1 - temp2;
     float absolute_dT = fabs(dT);
-    crossSectionArea = M_PI * (diameter / 2.00) * (diameter / 2.00);
+    crossSectionArea = 3.14159 * (diameter / 2.00) * (diameter / 2.00);
     if (absolute_dT > 0 && sampleThickness > 0 && crossSectionArea > 0)
     {
-        thermalConductivity = (power_mW * sampleThickness) / (crossSectionArea * absolute_dT * 1000);
+        thermalConductivity = (power_mW * sampleThickness) / (crossSectionArea * absolute_dT * 1000.0000);
     }
     else
     {
@@ -1105,6 +1210,44 @@ bool handleNITJWifiCaptivePortal()
     }
 
     http.end();
+    // // Now make the login POST request
+    // String loginUrl = "http://10.10.11.1:8090/httpclient.html";
+    // http.begin(client, loginUrl);
+    // http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
+    // // Form data with proper encoding
+
+    // Serial.println("Attempting portal login with POST data:");
+    // Serial.println(postData);
+
+    // int httpResponseCode = http.POST(postData);
+    // String response = http.getString();
+
+    // Serial.print("Login response code: ");
+    // Serial.println(httpResponseCode);
+    // Serial.print("Response: ");
+    // Serial.println(response);
+
+    // http.end();
+
+    // // Check for success indicators
+    // bool success = (httpResponseCode > 0) &&
+    //                (response.indexOf("success") != -1 ||
+    //                 response.indexOf("authenticated") != -1);
+
+    // if (success)
+    // {
+    //     Serial.println("Captive portal login successful!");
+    //     // Verify internet connectivity
+    //     if ( checkInternetAccess())
+    //     {
+    //         return true;
+    //     }
+    //     Serial.println("Internet access verification failed");
+    //     return false;
+    // }
+
+    // Serial.println("Captive portal login failed");
+    // return false;
     return true;
 }
